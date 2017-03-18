@@ -12,10 +12,6 @@ var systemLogger = Log4js.getLogger('system');
 var accessLogger = Log4js.getLogger('access');
 var errorLogger = Log4js.getLogger('error');
 
-systemLogger.info('this is system log!!!');
-accessLogger.info('this is access log!!!');
-errorLogger.info('this is error log!!!');
-
 // File upload.
 var multer = require('multer');
 var fs = require('fs');
@@ -447,10 +443,10 @@ router.route('/subjects/:subjectObjId/assignments')
 		accessLogger.info('url:'+ decodeURI(req.url));
 		console.log("debug mada attetara naosu");
 		accessLogger.info('receive:'+ req.body);
-		/*
+
 		Subject.findByIdAndUpdate(
 			req.params.subjectObjId,
-			{$addToSet: { assignments: [req.body] }},
+			{$addToSet: { assignments: req.body }},
 			{upsert: false, new: true},
 			function(err, updatedSubject) {
 				if (err){
@@ -460,29 +456,34 @@ router.route('/subjects/:subjectObjId/assignments')
 					res.json(updatedSubject);
 				}
 			}
-		);*/
+		);
 	});
 
 // GET/PUT api/subjects/:subjectObjId/assignments/:assignmentObjId
 router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 	.get(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		Subject.findById(req.params.assignmentObjId, function(err, assignment){
+		Subject.findById(req.params.subjectObjId, function(err, subject){
 			if (err){
 				errorLogger.error('failed to find subject: ' + req.params.subjectObjId);
 				res.send(err);
 			}else{
-				res.json(assignment);
+				for(var i = 0; i < subject.assignments.length; i++){
+					if(subject.assignments[i]._id == req.params.assignmentObjId){
+						res.json(subject.assignments[i]);
+						return;
+					}
+				}
+				res.send(err);
 			}
 		});
 	})
 	.put(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		console.log("attetara comento hazusu→" + req.body);
-/*		Subject.findByIdAndUpdate(
-			req.params.assignmentObjId,
-			req.body,
-			{upsert: false, new: true},
+		Subject.findByIdAndUpdate(
+			req.params.subjectObjId,
+			{ assignments: req.body },
+			{ upsert: false, new: true },
 			function(err, updatedAssignment) {
 				if (err){
 					errorLogger.error('failed to update assignment: ' + req.params.subjectObjId);
@@ -491,15 +492,16 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 					res.json({ message: 'The assignment has been updated' });
 				}
 			}
-		);*/
-	})
+		);
+	});
+
+	// GET/PUT api/subjects/:subjectObjId/assignments/:assignmentObjId
+router.route('/subjects/:subjectObjId/assignments/:assignmentObjId/assignmentItems')
 	.post(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		console.log("attetara comento hazusu→" + req.body);
-/*
-		Subject.findByIdAndUpdate(
-			req.params.subjectObjId,
-			{$addToSet: { assignmentItems: req.body }},
+		Subject.findOneAndUpdate(
+			{ _id: req.params.subjectObjId, "assignments._id": req.params.assignmentObjId },
+			{$addToSet: { "assignments.$.items": req.body }},
 			{upsert: false, new: true},
 			function(err, subject) {
 				if (err){
@@ -516,19 +518,29 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 					});
 				}
 			}
-		);*/
+		);
 	});
 
 // GET/PUT api/subjects/:subjectObjId/assignments/:assignmentObjId/assignmentItem/:assignmentItemObjId
-router.route('/subjects/:subjectObjId/assignments/:assignmentObjId/assignmentItem/:assignmentItemObjId')
+router.route('/subjects/:subjectObjId/assignments/:assignmentObjId/assignmentitems/:assignmentItemObjId')
 	.get(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		Subject.findById(req.params.assignmentItemObjId, function(err, assignment){
+		Subject.findById(req.params.subjectObjId, function(err, subject){
 			if (err){
 				errorLogger.error('failed to find assignment item: ' + req.params.assignmentItemObjId);
 				res.send(err);
 			}else{
-				res.json(assignment);
+				for(var i = 0; i < subject.assignments.length; i++){
+					if(subject.assignments[i]._id == req.params.assignmentObjId){
+						for(var j = 0; j < subject.assignments[i].items.length; j++){
+							if(subject.assignments[i].items[j]._id == req.params.assignmentItemObjId){
+								res.json(subject.assignments[i].items[j]);
+								return;
+							}
+						}
+					}
+				}
+				res.send(err);
 			}
 		});
 	})
