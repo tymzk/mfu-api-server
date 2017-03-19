@@ -279,13 +279,13 @@ router.route('/users')
 		});
 	});
 
-// GET/POST /api/users/:id
-router.route('/users/:id')
+// GET/POST /api/users/:userId
+router.route('/users/:userId')
 	.get(function(req, res){
-		accessLogger.info('url:'+ decodeURI(req.url));
-		User.findOne( { id: req.params.id }, function(err, user){
+		accessLogger.warn('url:'+ decodeURI(req.url));
+		User.findOne( { id: req.params.userId }, function(err, user){
 			if (err){
-				errorLogger.error("failed to find account: " + req.params.id);
+				errorLogger.error("failed to find account: " + req.params.userId );
 				res.send(err);
 			}else{
 				res.json(user);
@@ -295,32 +295,55 @@ router.route('/users/:id')
 	.post(function(req, res){
 		accessLogger.info('url:'+ decodeURI(req.url));
 		var user = new User();
-		user.id = req.params.id;
+		user.id = req.params.userId ;
 		user.save(function(err) {
 			if (err){
-				errorLogger.error("failed to create account: " + user.id);
+				errorLogger.error("failed to create account: " + user.userId );
 				res.send(err);
 			}else{
-				systemLogger.info("account has been created: " + user.id);
+				systemLogger.info("account has been created: " + user.userId );
 				res.json({ message: 'The new user has been created.' });
 			}
 		});
 	});
 
-// GET/POST /api/users/:id/subjects
-router.route('/users/:id/subjects')
+// GET/POST /api/users/:userId/subjects
+router.route('/users/:userId/subjects')
 	.get(function(req, res){
 		accessLogger.info('url:'+ decodeURI(req.url));
-		systemLogger.debug('koko izure naosu');
-		systemLogger.debug(' :should get data from users schema');
-		Subject.find(
-			{ students: req.params.id },
-			function(err, subjects){
+		systemLogger.debug('should debug');
+		User.findOne( { id: req.params.userId } )
+		.populate('subjects')
+		.exec(function(err, user){
 			if (err){
-				errorLogger.error("failed to find subjects: " + req.param.id);
+				errorLogger.error("failed to find users: " + req.param.userId);
 				res.send(err);
 			}else{
-				res.json(subjects);
+				if(user){
+					for(var i = 0; i < user.subjects.length; i++){
+						if(user.subjects[i].public){
+							for(var j = 0; j < user.subjects[i].items.length; j++){
+								if(!user.subjects[i].items[j].public){
+									user.subjects[i].items.splice(j, 1);
+								}
+							}
+						}else{
+							user.subjects.splice(i, 1);
+						}
+					}
+					res.json(user.subjects);
+				}else{
+					var newUser = new User();
+					newUser.id = req.params.userId;
+					newUser.save(function(err) {
+						if (err){
+							errorLogger.error('failed to create user account' + newUser.id);
+						}else{
+							systemLogger.info('User account has been created:' + newUser.id);
+						}
+					});
+					res.json(newUser.subjects);
+				}
 			}
 		});
 	});
@@ -422,11 +445,14 @@ router.route('/subjects/:subjectObjId/students')
 				errorLogger.error('failed to find subject: ' + req.params.subjectObjId);
 				res.send(err);
 			}else{
+				console.log(subject);
+				var oldUsers = subject.students;
+				var newUsers = req.body;
+				var allUsers = _.union(oldUsers, newUsers);
+				var delUsers = _.difference(allUsers, newUsers);
+				var addUsers = _.difference(allUsers, oldUsers);
 
-				var delUsers = _.difference(_.union(subject.students, req.body), req.body);
-				var addUsers = _.difference(_.union(subject.students, req.body), subject.students);
-
-				subject.students = req.body;
+				subject.students = newUsers;
 				subject.save(function(err) {
 					if (err){
 						errorLogger.error('failed to save subject');
@@ -440,7 +466,7 @@ router.route('/subjects/:subjectObjId/students')
 					User.findOneAndUpdate(
 						{ id: val },
 						{$pull: { "subjects": req.params.subjectObjId }},
-						function(err, subject) {
+						function(err, user) {
 							if (err){
 								errorLogger.error('- ' + val);
 							}else {
@@ -450,17 +476,23 @@ router.route('/subjects/:subjectObjId/students')
 					);
 				});
 				addUsers.forEach(function(val, idx, ar){
-					User.findOneAndUpdate(
-						{ id: val },
-						{$push: { "subjects": req.params.subjectObjId }},
-						function(err, subject) {
-							if (err){
-								errorLogger.error('+ ' + val);
-							}else {
-								systemLogger.info('+ ' + val);
-							}
+					User.findOne({id: val}, function(err, user){
+						if(!user){
+							systemLogger.info('create account: ' + val);
+							user = new User();
+							user.id = val;
+							user.subjects = [];
 						}
-					);
+						user.subjects.push(req.params.subjectObjId);
+						user.save(function(err) {
+							if (err){
+								errorLogger.error('failed to save subject');
+								res.send(err);
+							}else{
+								systemLogger.info('student list has been updated');
+							}
+						});
+					});
 				});
 				res.json({ message: 'Students have been updated.' });
 			}
