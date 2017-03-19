@@ -4,6 +4,8 @@ var express = require('express');
 var app = express();
 var router = express.Router();
 var bodyParser = require('body-parser');
+var _ = require('lodash');
+
 var Log4js = require('log4js');
 
 Log4js.configure('log.config.json');
@@ -43,23 +45,21 @@ var UserCollectionName='{ collection: "users"}';
 
 var SubjectSchema = new Schema({
 	name : {type: String, required: true},
+	public: {type: Boolean},
 	teachers : [ {type: String, unique: true, required: true} ],
 	semester : { type: String, enum : [ 'spring', 'autumn' ] },
 	assignments : [ {
-		private: {type: Boolean, default: true},
 		name: {type: String},
+		public: {type: Boolean},
 		deadline: {type: Date},
 		description : {type: String},
-		created: {type: Date, default: Date.now() },
 		items: [ {
 			name: {type: String},
 			alias: {type: String},
-			description: {type: String},
-			created: {type: Date, default: Date.now() }
+			description: {type: String}
 		} ]
 	} ],
-	students : [ {type: String} ],
-  created : {type: Date, default: Date.now()}
+	students : [ {type: String} ]
 }, { collection: "subjects" });
 
 var AdminSchema  = new Schema({
@@ -416,26 +416,117 @@ router.route('/subjects/:subjectObjId/students')
 	})
 	.put(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		systemLogger.debug('should be debug');
 
 		Subject.findById(req.params.subjectObjId, function(err, subject) {
 			if(err){
 				errorLogger.error('failed to find subject: ' + req.params.subjectObjId);
 				res.send(err);
 			}else{
-				console.log("undebugged ittan comment out" + req.body);
-/*				subject.students = req.body;
+
+				var delUsers = _.difference(_.union(subject.students, req.body), req.body);
+				var addUsers = _.difference(_.union(subject.students, req.body), subject.students);
+
+				subject.students = req.body;
 				subject.save(function(err) {
 					if (err){
-						errorLogger('failed to save subject');
+						errorLogger.error('failed to save subject');
 						res.send(err);
 					}else{
-						res.json({ message: 'Students have been updated.' });
+						systemLogger.info('student list has been updated');
 					}
-				});*/
+				});
+
+				delUsers.forEach(function(val, idx, ar){
+					User.findOneAndUpdate(
+						{ id: val },
+						{$pull: { "subjects": req.params.subjectObjId }},
+						function(err, subject) {
+							if (err){
+								errorLogger.error('- ' + val);
+							}else {
+								systemLogger.info('- ' + val);
+							}
+						}
+					);
+				});
+				addUsers.forEach(function(val, idx, ar){
+					User.findOneAndUpdate(
+						{ id: val },
+						{$push: { "subjects": req.params.subjectObjId }},
+						function(err, subject) {
+							if (err){
+								errorLogger.error('+ ' + val);
+							}else {
+								systemLogger.info('+ ' + val);
+							}
+						}
+					);
+				});
+				res.json({ message: 'Students have been updated.' });
 			}
 		});
 	});
+
+// GET/PUT subjects/:subjectObjId/students
+router.route('/subjects/:subjectObjId/teachers/:teacherId')
+	// Get student list
+	.post(function(req, res) {
+		accessLogger.info('url:'+ decodeURI(req.url));
+
+		Subject.findByIdAndUpdate(
+			req.params.subjectObjId,
+			{$push: { teachers: req.params.teacherId }},
+			function(err, updatedSubject) {
+				if (err){
+					errorLogger.error('failed to update subject: ' + req.params.subjectObjId);
+					res.send(err);
+				}else{
+					systemLogger.info(req.params.teacherId + ' has been added to ' + req.params.subjectObjId);
+					Admin.findOneAndUpdate(
+						{ id: req.params.teacherId },
+						{$push: { "subjects": req.params.subjectObjId }},
+						function(err, subject) {
+							if (err){
+								errorLogger.error('+ ' + req.params.teacherId);
+							}else {
+								systemLogger.info('+ ' + req.params.teacherId);
+							}
+						}
+					);
+					res.json(updatedSubject);
+				}
+			}
+		);
+	})
+	.delete(function(req, res) {
+		accessLogger.info('url:'+ decodeURI(req.url));
+
+		Subject.findByIdAndUpdate(
+			req.params.subjectObjId,
+			{$pull: { teachers: req.params.teacherId }},
+			function(err, updatedSubject) {
+				if (err){
+					errorLogger.error('failed to update subject: ' + req.params.subjectObjId);
+					res.send(err);
+				}else{
+					systemLogger.info(req.params.teacherId + ' has been deleted from ' + req.params.subjectObjId);
+					Admin.findOneAndUpdate(
+						{ id: req.params.teacherId },
+						{$pull: { "subjects": req.params.subjectObjId }},
+						function(err, subject) {
+							if (err){
+								errorLogger.error('+ ' + req.params.teacherId);
+							}else {
+								systemLogger.info('+ ' + req.params.teacherId);
+							}
+						}
+					);
+					res.json(updatedSubject);
+				}
+			}
+		);
+	})
+
 
 // GET/PUT api/subjects/:subjectObjId/assignments
 router.route('/subjects/:subjectObjId/assignments')
@@ -472,6 +563,7 @@ router.route('/subjects/:subjectObjId/assignments')
 router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 	.get(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
+
 		Subject.findById(req.params.subjectObjId, function(err, subject){
 			if (err){
 				errorLogger.error('failed to find subject: ' + req.params.subjectObjId);
@@ -489,7 +581,6 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 	})
 	.put(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
-		systemLogger.debug('should be debug');
 
 		Subject.findById(req.params.subjectObjId, function(err, subject){
 			if (err){
@@ -515,22 +606,6 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId')
 				//res.send(err);
 			}
 		});
-/*
-		// bukkowasu yabai yatu. korede kaita houga iidaroukedo gomi.
-		Subject.findOneAndUpdate(
-			{ _id: req.params.subjectObjId, "assignments._id": req.params.assignmentObjId },
-			{$addToSet: { "assignments.$" : req.body } },
-			{ upsert: false, new: true },
-			function(err, updatedAssignment) {
-				if (err){
-					errorLogger.error('failed to update assignment: ' + req.params.subjectObjId);
-					res.send(err);
-				}else{
-					res.json({ message: 'The assignment has been updated' });
-				}
-			}
-		);
-*/
 	});
 
 	// GET/PUT api/subjects/:subjectObjId/assignments/:assignmentObjId
@@ -618,22 +693,6 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId/items/:assign
 //				res.send(err);
 			}
 		});
-/*
-	// gomi bug.
-		Subject.findByIdAndUpdate(
-			req.params.assignmentItemObjId,
-			req.body,
-			{upsert: false, new: true},
-			function(err, updatedAssignmentItem) {
-				if (err){
-					errorLogger.error('failed to update assignment: ' + req.params.subjectObjId);
-					res.send(err);
-				}else{
-					res.json(updatedAssignmentItem);
-				}
-			}
-		);
-*/
 	});
 
 
