@@ -391,6 +391,7 @@ router.route('/subjects')
 		});
 	});
 
+
 // GET/PUT /api/subjects/:subjectObjId
 router.route('/subjects/:subjectObjId')
 	.get(function(req, res) {
@@ -407,15 +408,17 @@ router.route('/subjects/:subjectObjId')
 	.put(function(req, res) {
 		accessLogger.info('url:'+ decodeURI(req.url));
 		systemLogger.debug('should be debug');
+		systemLogger.debug(req.body.public);
 		Subject.findByIdAndUpdate(
 			req.params.subjectObjId,
-			{name: req.body.name, semester: req.body.semester },
+			{name: req.body.name, semester: req.body.semester, public: req.body.public },
 			{upsert: false, new: true},
 			function(err, updatedSubject) {
 				if(err){
 					errorLogger.error('failed to update subject: ' + req.params.subjectObjId);
 					res.send(err);
 				} else {
+					systemLogger.info('has updated subject' + req.params.subjectObjId);
 					res.json(updatedSubject);
 				}
 			}
