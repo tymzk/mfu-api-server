@@ -136,6 +136,7 @@ app.post("/upload", upload, function(req, res) {
 
 	if(!fs.existsSync(userDir)){
 		systemLogger.warn('mkdir:'+ userDir);
+
 		fs.mkdir(userDir);
 	}
 
@@ -205,7 +206,7 @@ router.route('/admins')
 		Admin.find(function(err, admins){
 			if (err)
 				res.send(err);
-			res.json(admins);
+			res.status(200).json(admins);
 		});
 	});
 
@@ -216,7 +217,7 @@ router.route('/admins/ids')
 		Admin.find( {}, { _id:0, subjects:0, __v:0 }, function(err, adminIds){
 			if (err)
 				res.send(err);
-			res.json(adminIds);
+			res.status(200).json(adminIds);
 		});
 	});
 
@@ -229,7 +230,7 @@ router.route('/admins/:userId')
 				errorLogger.error('failed to find admin account' + admin.id);
 				res.send(err);
 			}else{
-				res.json(admin);
+				res.status(200).json(admin);
 			}
 		});
 	})
@@ -243,7 +244,7 @@ router.route('/admins/:userId')
 				res.send(err);
 			}else{
 				systemLogger.info('admin account has been created:' + admin.id);
-				res.json({ message: 'The new admin has been created.' });
+				res.status(200).json({ message: 'The new admin has been created.' });
 			}
 		});
 	});
@@ -352,6 +353,7 @@ router.route('/users/:userId/subjects')
 // GET/POST /api/users/:userId/subjects/:subjectObjId/assignments/:assingmentObjId
 router.route('/users/:userId/subjects/:subjectObjId/:assingments/:assignmentObjId/files')
 	.get(function(req, res){
+
 		accessLogger.info('url:'+ decodeURI(req.url));
 		var statJson = [];
 		User.findOne( { id: req.params.userId } )
@@ -380,7 +382,8 @@ router.route('/users/:userId/subjects/:subjectObjId/:assingments/:assignmentObjI
 										if(!fs.existsSync(filepath)){
 											systemLogger.debug('assignment item is not submitted: '+ filepath);
 											//statData._id = user.subjects[i].assignments[j].items[k]._id;
-											//statData.mtime = null;
+											//statData.mtime = null;						{new: true},
+
 											//statData.size = null;
 											//statData[user.subjects[i].assignments[j].items[k]._id] = null;
 										}else{
@@ -575,7 +578,8 @@ router.route('/subjects/:subjectObjId/teachers/:teacherId')
 
 		Subject.findByIdAndUpdate(
 			req.params.subjectObjId,
-			{$push: { teachers: req.params.teacherId }},
+			{$addToSet: { teachers: req.params.teacherId }},
+			{new: true},
 			function(err, updatedSubject) {
 				if (err){
 					errorLogger.error('failed to update subject: ' + req.params.subjectObjId);
@@ -584,7 +588,8 @@ router.route('/subjects/:subjectObjId/teachers/:teacherId')
 					systemLogger.info(req.params.teacherId + ' has been added to ' + req.params.subjectObjId);
 					Admin.findOneAndUpdate(
 						{ id: req.params.teacherId },
-						{$push: { "subjects": req.params.subjectObjId }},
+						{$addToSet: { "subjects": req.params.subjectObjId }},
+						{new: true},
 						function(err, subject) {
 							if (err){
 								errorLogger.error('+ ' + req.params.teacherId);
@@ -593,6 +598,7 @@ router.route('/subjects/:subjectObjId/teachers/:teacherId')
 							}
 						}
 					);
+					console.log(JSON.stringify(updatedSubject));
 					res.json(updatedSubject);
 				}
 			}
@@ -604,6 +610,7 @@ router.route('/subjects/:subjectObjId/teachers/:teacherId')
 		Subject.findByIdAndUpdate(
 			req.params.subjectObjId,
 			{$pull: { teachers: req.params.teacherId }},
+			{new: true},
 			function(err, updatedSubject) {
 				if (err){
 					errorLogger.error('failed to update subject: ' + req.params.subjectObjId);
@@ -613,6 +620,7 @@ router.route('/subjects/:subjectObjId/teachers/:teacherId')
 					Admin.findOneAndUpdate(
 						{ id: req.params.teacherId },
 						{$pull: { "subjects": req.params.subjectObjId }},
+						{new: true},
 						function(err, subject) {
 							if (err){
 								errorLogger.error('+ ' + req.params.teacherId);
