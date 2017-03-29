@@ -159,7 +159,7 @@ function move(tmpPath, newPath, callback){
 		}
 //			callback();
 	});
-	function copoy(){
+	function copy(){
 		var readStream = fs.createReadStream(tmpPath);
 		var writeStream = fs.createWriteStream(newPath);
 
@@ -172,7 +172,6 @@ function move(tmpPath, newPath, callback){
 		readStream.pipe(writeStream);
 	}
 }
-
 
 app.post("/upload", function(req, res) {
 	accessLogger.info('url:'+ decodeURI(req.url));
@@ -311,7 +310,6 @@ router.route('/users/:userId')
 router.route('/users/:userId/subjects')
 	.get(function(req, res){
 		accessLogger.info('url:'+ decodeURI(req.url));
-		systemLogger.debug('should debug');
 		User.findOne( { id: req.params.userId } )
 		.populate('subjects')
 		.exec(function(err, user){
@@ -322,9 +320,12 @@ router.route('/users/:userId/subjects')
 				if(user){
 					for(var i = 0; i < user.subjects.length; i++){
 						if(user.subjects[i].public){
-							for(var j = 0; j < user.subjects[i].items.length; j++){
-								if(!user.subjects[i].items[j].public){
-									user.subjects[i].items.splice(j, 1);
+							for(var j = 0; j < user.subjects[i].assignments.length; j++){
+								if(user.subjects[i].assignments[j].public){
+//									for(var k = 0; k < user.subjects[i].assignments.items[k]; k++){
+//									}
+								}else{
+									user.subjects[i].assignments.splice(j, 1);
 								}
 							}
 						}else{
@@ -343,6 +344,70 @@ router.route('/users/:userId/subjects')
 						}
 					});
 					res.json(newUser.subjects);
+				}
+			}
+		});
+	});
+
+// GET/POST /api/users/:userId/subjects/:subjectObjId/assignments/:assingmentObjId
+router.route('/users/:userId/subjects/:subjectObjId/:assingments/:assignmentObjId/files')
+	.get(function(req, res){
+		accessLogger.info('url:'+ decodeURI(req.url));
+		var statJson = [];
+		User.findOne( { id: req.params.userId } )
+		.populate('subjects')
+		.exec(function(err, user){
+			if (err){
+				errorLogger.error("failed to find users: " + req.param.userId);
+				res.send(err);
+			}else{
+				if(user){
+					for(var i = 0; i < user.subjects.length; i++){
+						systemLogger.debug("test1");
+						if(user.subjects[i]._id == req.params.subjectObjId
+							&& user.subjects[i].public){
+							systemLogger.debug("test2");
+							for(var j = 0; j < user.subjects[i].assignments.length; j ++){
+								if(user.subjects[i].assignments[j]._id == req.params.assignmentObjId
+									&& user.subjects[i].assignments[j].public){
+									for(var k = 0; k < user.subjects[i].assignments[j].items.length; k++){
+										var filepath = uploadDir
+											+ '/' + req.params.subjectObjId
+											+ '/' + req.params.assignmentObjId
+											+ '/' + user.subjects[i].assignments[j].items[k]._id
+											+ '/' + req.params.userId
+											+ '/' + user.subjects[i].assignments[j].items[k].alias;
+										if(!fs.existsSync(filepath)){
+											systemLogger.debug('assignment item is not submitted: '+ filepath);
+											//statData._id = user.subjects[i].assignments[j].items[k]._id;
+											//statData.mtime = null;
+											//statData.size = null;
+											//statData[user.subjects[i].assignments[j].items[k]._id] = null;
+										}else{
+											//statData[user.subjects[i].assignments[j].items[k]._id] = fs.statSync(filepath);
+											var statData = {};
+											statData = fs.statSync(filepath);
+											statData._id = user.subjects[i].assignments[j].items[k]._id;
+											delete statData.dev;
+											delete statData.mode;
+											delete statData.gid;
+											delete statData.uid;
+											delete statData.nlink;
+											delete statData.rdev;
+											delete statData.blksize;
+											delete statData.ino;
+											delete statData.blocks;
+											delete statData.atime;
+											delete statData.ctime;
+											delete statData.birthtime;
+											statJson.push(statData);
+										}
+									}
+								}
+							}
+						}
+					}
+					res.json(statJson);
 				}
 			}
 		});
@@ -489,10 +554,10 @@ router.route('/subjects/:subjectObjId/students')
 						user.subjects.push(req.params.subjectObjId);
 						user.save(function(err) {
 							if (err){
-								errorLogger.error('failed to save subject');
+								errorLogger.error('failed to save user');
 								res.send(err);
 							}else{
-								systemLogger.info('student list has been updated');
+								systemLogger.info('user info has been updated');
 							}
 						});
 					});
