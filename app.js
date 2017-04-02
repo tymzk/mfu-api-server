@@ -81,10 +81,10 @@ app.use(bodyParser.json());
 
 // If the back-end is different from the front-end, must care CORS.
 app.use(function(req, res, next) {
+	res.setHeader("Access-Control-Allow-Origin", "http://localhost.co.jp:4200");
 	res.setHeader("Access-Control-Allow-Methods", "POST, PUT, OPTIONS, DELETE, GET");
-	res.header("Access-Control-Allow-Origin", "http://localhost.co.jp:4200");
-	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-	res.header("Access-Control-Allow-Credentials", true);
+	res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+	res.setHeader("Access-Control-Allow-Credentials", true);
 	next();
 });
 
@@ -109,7 +109,7 @@ app.post("/upload", upload, function(req, res) {
 	var assignmentDir = subjectDir + '/' + data.assignmentObjectId;
 	var assignmentItemDir = assignmentDir + '/' + data.assignmentItemObjectId;
 	var userDir = assignmentItemDir + '/' + data.userId;
-
+	var now = new Date();
 	var tmpPath = req.files[0].path;
 	var destPath = userDir;
 
@@ -119,33 +119,55 @@ app.post("/upload", upload, function(req, res) {
 		destPath = destPath + '/' + req.files[0].filename;
 	}
 
-	if(!fs.existsSync(subjectDir)){
-		systemLogger.warn('mkdir:'+ subjectDir);
-		fs.mkdir(subjectDir);
-	}
+	Subject.findById(data.subjectObjectId, function(err, subject) {
+		if (err){
+			errorLogger.error('failed to find: ' + req.params.subjectObjId);
+			res.send(err);
+		}else {
+			console.log(subject);
 
-	if(!fs.existsSync(assignmentDir)){
-		systemLogger.warn('mkdir:'+ assignmentDir);
-		fs.mkdir(assignmentDir);
-	}
+			subject.assignments.forEach(function(val, idx, ar){
+				if(val._id == data.assignmentObjectId){
+//					offset = val.deadline.getTimezoneOffset() * 60000;
+//					vdeadline = new Date(val.deadline.getTime() + offset);
+					if(val.deadline.getTime() > now.getTime()){
+						if(!fs.existsSync(subjectDir)){
+							systemLogger.warn('mkdir:'+ subjectDir);
+							fs.mkdir(subjectDir);
+						}
 
-	if(!fs.existsSync(assignmentItemDir)){
-		systemLogger.warn('mkdir:'+ assignmentItemDir);
-		fs.mkdir(assignmentItemDir);
-	}
+						if(!fs.existsSync(assignmentDir)){
+							systemLogger.warn('mkdir:'+ assignmentDir);
+							fs.mkdir(assignmentDir);
+						}
 
-	if(!fs.existsSync(userDir)){
-		systemLogger.warn('mkdir:'+ userDir);
+						if(!fs.existsSync(assignmentItemDir)){
+							systemLogger.warn('mkdir:'+ assignmentItemDir);
+							fs.mkdir(assignmentItemDir);
+						}
 
-		fs.mkdir(userDir);
-	}
+						if(!fs.existsSync(userDir)){
+							systemLogger.warn('mkdir:'+ userDir);
 
-	console.log(tmpPath);
-	console.log(destPath);
+							fs.mkdir(userDir);
+						}
 
-	move(tmpPath, destPath);
+						console.log(tmpPath);
+						console.log(destPath);
 
-	res.send(req.files);
+						move(tmpPath, destPath);
+
+//						res.send(req.files);
+						res.status(200).json({message: 'files have been uploaded'});
+					}
+					else{
+						systemLogger.error("deadline expired. the file was not saved. : " + data.userId);
+						res.status(408).json({message: 'submission deadline has expired'});
+					}
+				}
+			});
+		}
+	});
 });
 
 function move(tmpPath, newPath, callback){
@@ -218,6 +240,20 @@ router.route('/admins/ids')
 			if (err)
 				res.send(err);
 			res.status(200).json(adminIds);
+		});
+	});
+
+// GET /api/admins/ids/:adminId
+router.route('/admins/ids/:adminId')
+	.get(function(req, res){
+		accessLogger.warn('url:'+ decodeURI(req.url));
+		Admin.findOne({ id: req.params.adminId }, { _id:0, subjects:0, __v:0 },
+			function(err, admin){
+			if (!err && admin){
+				res.status(200).json({isAdmin: true});
+			}else{
+				res.status(200).json({isAdmin: false});
+			}
 		});
 	});
 
@@ -311,6 +347,8 @@ router.route('/users/:userId')
 router.route('/users/:userId/subjects')
 	.get(function(req, res){
 		accessLogger.info('url:'+ decodeURI(req.url));
+		var now = new Date();
+		var userData = [];
 		User.findOne( { id: req.params.userId } )
 		.populate('subjects')
 		.exec(function(err, user){
@@ -319,20 +357,18 @@ router.route('/users/:userId/subjects')
 				res.send(err);
 			}else{
 				if(user){
-					for(var i = 0; i < user.subjects.length; i++){
-						if(user.subjects[i].public){
-							for(var j = 0; j < user.subjects[i].assignments.length; j++){
-								if(user.subjects[i].assignments[j].public){
-//									for(var k = 0; k < user.subjects[i].assignments.items[k]; k++){
-//									}
-								}else{
-									user.subjects[i].assignments.splice(j, 1);
-								}
-							}
-						}else{
-							user.subjects.splice(i, 1);
-						}
-					}
+					user.subjects = user.subjects.filter(function(v){
+						return v.public;
+					});
+					user.subjects.forEach(function(val){
+						val.assignments = val.assignments.filter(function(v){
+//							offset = v.deadline.getTimezoneOffset() * 60000;
+//							vdeadline = new Date(v.deadline.getTime() + offset);
+//							console.log(v.deadline);
+//							console.log(now.toISOString());
+							return v.public && (v.deadline.getTime() > now.getTime());
+						});
+					});
 					res.json(user.subjects);
 				}else{
 					var newUser = new User();
@@ -737,13 +773,14 @@ router.route('/subjects/:subjectObjId/assignments/:assignmentObjId/items')
 
 		Subject.findOneAndUpdate(
 			{ _id: req.params.subjectObjId, "assignments._id": req.params.assignmentObjId },
-			{$push: { "assignments.$.items": req.body }},
-			function(err, subject) {
+			{$addToSet: { "assignments.$.items": req.body }},
+			{new: true},
+			function(err, updatedSubject) {
 				if (err){
 					errorLogger.error('failed to update ' + req.params.subjectObjId);
 					res.send(err);
 				}else {
-					res.json({ message: 'The assignment item has been updated' });
+					res.json(updatedSubject);
 				}
 			}
 		);

@@ -6,9 +6,12 @@
   "author": "",
   "license": "",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@angular/cli": "^1.0.0"
+  },
   "dependencies": {
     "body-parser": "1.14.1",
     "express": "4.13.3",
