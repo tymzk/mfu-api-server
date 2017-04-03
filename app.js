@@ -5,8 +5,9 @@ var app = express();
 var router = express.Router();
 var bodyParser = require('body-parser');
 var _ = require('lodash');
-
+var https = require('https');
 var Log4js = require('log4js');
+var client = require('redis').createClient();
 
 Log4js.configure('log.config.json');
 
@@ -92,7 +93,7 @@ app.use(function(req, res, next) {
 var ObjectId = mongoose.Types.ObjectId;
 var storage = multer.diskStorage({
 	destination: function (req, file, cb) {
-		cb(null, uploadDir);
+		cb(null, uploadDirrouter);
 	},
 });
 
@@ -286,6 +287,37 @@ router.route('/admins/:userId')
 		});
 	});
 /*.delete(function(req, res){*/
+
+router.route('/auth/:userId/token/:token')
+	.get(function(req, res){
+		var url = 'https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + req.params.token;
+		https.get(url, (resData) => {
+			if(resData.statusCode == 200){
+				let body = '';
+				resData.setEncoding('utf8');
+				resData.on('data', (chunk) => {
+					body += chunk;
+				});
+				resData.on('end', (resApi) => {
+					resData = JSON.parse(body);
+					console.log(resData);
+
+					var pos = resData.email.indexOf("@");
+					var resUserId = resData.email.substring(0, pos);
+
+					if(resUserId == req.params.userId){
+						res.status(200).json({message: "success"});
+					}else{
+						res.status(403).json({message: "error"});
+					}
+				});
+			}else{
+				res.status(403).json({message: "error"});
+			}
+		}).on('error', (e) => {
+			console.log(e.message);
+		});
+	});
 
 // GET /api/admins/:userId/subjects/
 router.route('/admins/:userId/subjects')
