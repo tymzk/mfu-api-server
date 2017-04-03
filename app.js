@@ -81,7 +81,8 @@ app.use(bodyParser.json());
 
 // If the back-end is different from the front-end, must care CORS.
 app.use(function(req, res, next) {
-	res.setHeader("Access-Control-Allow-Origin", "http://localhost.co.jp:4200");
+//	res.setHeader("Access-Control-Allow-Origin", "http://localhost.co.jp:4200");
+	res.setHeader("Access-Control-Allow-Origin", "http://qual-jiro.minet.se.shibaura-it.ac.jp");
 	res.setHeader("Access-Control-Allow-Methods", "POST, PUT, OPTIONS, DELETE, GET");
 	res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
 	res.setHeader("Access-Control-Allow-Credentials", true);
